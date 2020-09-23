@@ -15,7 +15,6 @@ RUN apk add --no-cache \
         curl \
         curl-dev \
         openssl-dev \
-        openssh \
         ca-certificates \
         clang \
         llvm \

@@ -1,32 +1,80 @@
-version: '3'
+version: '3.3'
 
 services:
   master:
-    container_name: "${COMPOSE_PROJECT_NAME:-citus}_master"
-    image: 'citusdata/citus:9.4.0'
-    ports: ["${MASTER_EXTERNAL_PORT:-5432}:5432"]
-    labels: ['com.citusdata.role=Master']
+    image: 'lucasfs/citus-armhf'
     environment: &AUTH
-      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      PGUSER: "${POSTGRES_USER:-postgres}"
-      PGPASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_HOST_AUTH_METHOD: "${POSTGRES_HOST_AUTH_METHOD:-trust}"
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=testdb
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - node.labels.type == master
+    volumes:
+      - /mnt/storage/pgdata:/var/lib/postgresql/data
+    ports:
+      - target: 5432
+        published: 5432
+        mode: host
+    networks:
+      - cluster_net
+
   worker:
-    image: 'citusdata/citus:9.4.0'
-    labels: ['com.citusdata.role=Worker']
-    depends_on: [ manager ]
-    environment: *AUTH
+    image: 'lucasfs/citus-armhf'
+    environment: *AUTH 
     command: "/wait-for-manager.sh"
+    
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - node.labels.type == slave
     volumes: 
       - healthcheck-volume:/healthcheck
+      - /mnt/storage/pgdata:/var/lib/postgresql/data
+    ports:
+      - target: 5432
+        published: 5432
+        mode: host
+    networks:
+      - cluster_net
+
   manager:
-    container_name: "${COMPOSE_PROJECT_NAME:-citus}_manager"
-    image: 'citusdata/membership-manager:0.3.0'
-    volumes: 
-      - "${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock"
-      - healthcheck-volume:/healthcheck
-    depends_on: [ master ]
+    image: 'lucasfs/membership-manager'
     environment: *AUTH
+    volumes: 
+      - /var/run/docker.sock:/var/run/docker.sock
+      - healthcheck-volume:/healthcheck
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - node.labels.type == master
+    networks:
+      - cluster_net
+
 volumes:
   healthcheck-volume:
+
+networks:
+  cluster_net:
+    external: true
+    name: citus-net  
+    
