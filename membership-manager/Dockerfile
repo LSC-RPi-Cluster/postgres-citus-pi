@@ -4,6 +4,7 @@ RUN apk add --no-cache \
             --virtual psycodeps \
         gcc \
         musl-dev \
+        openssh \
         postgresql-dev \
         python3-dev && \
     pip install docker psycopg2 && \
