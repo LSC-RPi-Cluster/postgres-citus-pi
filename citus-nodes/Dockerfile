@@ -32,6 +32,9 @@ RUN apk add --no-cache \
 # add citus to default PostgreSQL config
 RUN echo "shared_preload_libraries='citus'" >> /usr/local/share/postgresql/postgresql.conf.sample
 
+# disable ssl
+RUN sed -i 's/#ssl = off/ssl = off/' /usr/local/share/postgresql/postgresql.conf.sample
+
 # add scripts to run after initdb
 COPY 001-create-citus-extension.sql /docker-entrypoint-initdb.d/
 
