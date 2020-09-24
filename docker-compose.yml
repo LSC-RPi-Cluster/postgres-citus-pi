@@ -1,9 +1,9 @@
-version: '3.3'
+version: '3.8'
 
 services:
   master:
-    image: 'lucasfs/citus-armhf'
-    environment: &AUTH
+    image: lucasfs/citus-armhf
+    environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=testdb
@@ -30,8 +30,14 @@ services:
 
   worker:
     image: 'lucasfs/citus-armhf'
-    environment: *AUTH 
     command: "/wait-for-manager.sh"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=testdb
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
     
     deploy:
       restart_policy:
@@ -53,8 +59,14 @@ services:
       - cluster_net
 
   manager:
-    image: 'lucasfs/membership-manager'
-    environment: *AUTH
+    image: lucasfs/membership-manager-armhf
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=testdb
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
     volumes: 
       - /var/run/docker.sock:/var/run/docker.sock
       - healthcheck-volume:/healthcheck

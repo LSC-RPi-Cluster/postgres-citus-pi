@@ -14,10 +14,20 @@ import psycopg2
 import signal
 from sys import exit, stderr
 from time import sleep
+import subprocess
 
 # The health check file that is used to signal that the managerr is ready to accept new worker nodes
 HEALTHCHECK_FILE= '/healthcheck/manager-ready'
 
+# find host hostname and ip in swarm network
+def find_host(hostname):
+    host_list = []
+    getent = subprocess.check_output(["getent", "hosts", "tasks."+str(hostname)])
+    for line in getent.splitlines():
+        host_list.append(line.decode("utf-8").split())
+    
+    return host_list
+    
 # adds a host to the cluster
 def add_worker(conn, host):
     cur = conn.cursor()
@@ -43,10 +53,12 @@ def remove_worker(conn, host):
 # This means that whenever manager is created, master is already there, but it may
 # not be ready to accept connections. We'll try until we can create a connection.
 def connect_to_master():
-    citus_host    = environ.get('CITUS_HOST', 'master')
-    postgres_pass = environ.get('POSTGRES_PASSWORD', '')
-    postgres_user = environ.get('POSTGRES_USER', 'postgres')
-    postgres_db   = environ.get('POSTGRES_DB', postgres_user)
+
+    master_hostname = environ.get('CITUS_HOST', 'master')
+    postgres_pass   = environ.get('POSTGRES_PASSWORD', '')
+    postgres_user   = environ.get('POSTGRES_USER', 'postgres')
+    postgres_db     = environ.get('POSTGRES_DB', postgres_user)
+    citus_host      = find_host(master_hostname)[0][0]
 
     conn = None
     while conn is None:
