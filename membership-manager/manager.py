@@ -58,7 +58,9 @@ def connect_to_master():
     postgres_pass   = environ.get('POSTGRES_PASSWORD', '')
     postgres_user   = environ.get('POSTGRES_USER', 'postgres')
     postgres_db     = environ.get('POSTGRES_DB', postgres_user)
-    citus_host      = find_host(master_hostname)[0][0]
+    citus_host      = master_hostname#find_host(master_hostname)[0][0]
+
+    print("master hostname: "+master_hostname)
 
     conn = None
     while conn is None:

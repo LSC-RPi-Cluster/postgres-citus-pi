@@ -16,4 +16,5 @@ ADD manager.py /
 HEALTHCHECK --interval=1s --start-period=1s CMD /bin/sh -c 'test -f /healthcheck/manager-ready'
 
 # -u necessary to flush logging to docker in a timely manner
-CMD [ "python", "-u", "./manager.py"]
+#CMD [ "python", "-u", "./manager.py"]
+CMD ["/bin/bash", "-c","sleep 60000 && python -u ./manager.py"]
