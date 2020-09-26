@@ -12,9 +12,5 @@ RUN apk add --no-cache \
 
 ADD manager.py /
 
-# the manager creates a file when ready to consume events
-HEALTHCHECK --interval=1s --start-period=1s CMD /bin/sh -c 'test -f /healthcheck/manager-ready'
-
-# -u necessary to flush logging to docker in a timely manner
-#CMD [ "python", "-u", "./manager.py"]
-CMD ["/bin/sh", "-c","touch /healthcheck/manager-ready && sleep 60000 && python -u ./manager.py"]
+# -u in python is necessary to flush logging to docker in a timely manner
+CMD ["/bin/sh", "-c", "/boot-check.sh && python -u ./manager.py"]
