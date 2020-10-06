@@ -14,20 +14,17 @@ import psycopg2
 import signal
 from sys import exit, stderr
 from time import sleep
-import subprocess
 
-# The health check file that is used to signal that the managerr is ready to accept new worker nodes
-HEALTHCHECK_FILE= '/healthcheck/manager-ready'
+# get a list of worker nodes actives in the cluster
+def get_active_workers(conn):
+    cur = conn.cursor()
+    cur.execute("""SELECT node_name FROM master_get_active_worker_nodes();""")
 
-# find host hostname and ip in swarm network
-def find_host(hostname):
-    host_list = []
-    getent = subprocess.check_output(["getent", "hosts", "tasks."+str(hostname)])
-    for line in getent.splitlines():
-        host_list.append(line.decode("utf-8").split())
-    
-    return host_list
-    
+    rows = cur.fetchall()
+
+    return [node[0] for node in rows]
+
+
 # adds a host to the cluster
 def add_worker(conn, host):
     cur = conn.cursor()
@@ -79,36 +76,74 @@ def connect_to_master():
 
     return conn
 
+
+# return a list of tasks with desireState = running
+def get_healthy_tasks(service):
+
+    # wait a while for service tasks status update
+    sleep(5) 
+
+    healthy = []
+    for task in service.tasks():
+        if task['DesiredState'] == 'running':
+            task_ip = task['NetworksAttachments'][0]['Addresses'][0]
+            healthy.append(task_ip.split('/', 1)[0])
+
+    return healthy
+
+# checks the status of tasks in the service and updates workers in the citus cluster
+def update_cluster(conn, service):
+    healthy_tasks = get_healthy_tasks(service)
+    active_workers = get_active_workers(conn)
+
+    new_nodes = list(set(healthy_tasks)-set(active_workers))
+
+    if new_nodes:
+        for node in new_nodes:
+            add_worker(conn, node)
+
+    down_nodes = list(set(active_workers)-set(healthy_tasks))
+
+    if down_nodes:
+        for node in down_nodes:
+            remove_worker(conn, node)
+
+
 # main logic loop for the manager
 def docker_checker():
     client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
-    actions = {'health_status: healthy': add_worker, 'destroy': remove_worker}
-
+   
     # creates the necessary connection to make the sql calls if the master is ready
     conn = connect_to_master()
 
-    # introspect the compose project used by this citus cluster
+    # introspect the stack namespace used by this citus cluster
     my_hostname = environ['HOSTNAME']
     this_container = client.containers.get(my_hostname)
-    compose_project = this_container.labels['com.docker.compose.project']
+    swarm_stack = this_container.labels['com.docker.stack.namespace']
 
-    # we only care about worker container health/destroy events from this cluster
-    print("found compose project: %s" % compose_project, file=stderr)
-    filters = {'event': list(actions),
-               'label': ["com.docker.compose.project=%s" % compose_project,
-                         "com.citusdata.role=Worker"],
-               'type': 'container'}
+    # Filter only citus workers services in swarm stack
+    print("Found swarm stack: %s" % swarm_stack, file=stderr)
+    filters = {'label': ["com.docker.stack.namespace=%s" % swarm_stack,
+                         "com.citusdata.role=Worker"]}
 
+    services = client.services.list(filters=filters)
 
-    # touch a file to signal we're healthy, then consume events
-    print('listening for events...', file=stderr)
-    open(HEALTHCHECK_FILE, 'a').close()
-    for event in client.events(decode=True, filters=filters):
-        worker_name = event['Actor']['Attributes']['name']
-        status = event['status']
+    # consume docker events
+    print('Listening for events...', file=stderr)
+    
+    for event in client.events(decode=True):
+        service_id = event['Actor']['ID']
+        actor_attrs = event['Actor']['Attributes'] 
 
-        status=actions[status](conn, worker_name)
+        # get service scale events
+        if (event['Type'] == "service") and (service_id == services[0].id):
+            if ("replicas.new" in actor_attrs):
+                update_cluster(conn, services[0])
 
+        # get node down events
+        if (event['Type'] == "node") and ("state.new" in actor_attrs):
+            if (actor_attrs['state.new'] == "down"):
+                update_cluster(conn, services[0])
 
 # implemented to make Docker exit faster (it sends sigterm)
 def graceful_shutdown(signal, frame):
@@ -117,9 +152,6 @@ def graceful_shutdown(signal, frame):
 
 
 def main():
-    if os.path.exists(HEALTHCHECK_FILE):
-        os.remove(HEALTHCHECK_FILE)
-
     signal.signal(signal.SIGTERM, graceful_shutdown)
     docker_checker()
 
