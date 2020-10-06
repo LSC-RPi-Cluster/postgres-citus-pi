@@ -30,7 +30,6 @@ services:
 
   worker:
     image: 'lucasfs/citus-armhf'
-    command: "/wait-for-manager.sh"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -69,7 +68,6 @@ services:
       - POSTGRES_HOST_AUTH_METHOD=trust
     volumes: 
       - /var/run/docker.sock:/var/run/docker.sock
-      - healthcheck-volume:/healthcheck
     deploy:
       restart_policy:
         condition: on-failure
@@ -81,9 +79,6 @@ services:
           - node.labels.type == master
     networks:
       - cluster_net
-
-volumes:
-  healthcheck-volume:
 
 networks:
   cluster_net:
