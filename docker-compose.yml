@@ -48,7 +48,6 @@ services:
         constraints:
           - node.labels.type == slave
     volumes: 
-      - healthcheck-volume:/healthcheck
       - /mnt/storage/pgdata:/var/lib/postgresql/data
     ports:
       - target: 5432
