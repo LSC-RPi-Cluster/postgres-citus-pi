@@ -5,6 +5,7 @@ RUN apk add --no-cache \
         gcc \
         musl-dev \
         postgresql-dev \
+        postgresql-client \
         python3-dev && \
     pip install docker psycopg2 && \
     apk add --no-cache libpq && \
