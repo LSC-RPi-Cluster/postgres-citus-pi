@@ -21,7 +21,7 @@ echo "Postgres master node is ready in: $MASTER"
 
 # make sure membership manager is ready 
 
-until [ $(getent hosts tasks.$MANAGER) ]
+until [[ $(getent hosts tasks.$MANAGER) ]]
 do 
     echo "Waiting for membership manager..."
     sleep 2
