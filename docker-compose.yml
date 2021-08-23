@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  master:
+  coordinator:
     image: lucasfs/citus-armhf
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=testdb
+      - POSTGRES_DB=ycsb
       - PGUSER=postgres
       - PGPASSWORD=postgres
       - POSTGRES_HOST_AUTH_METHOD=trust
@@ -33,7 +33,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=testdb
+      - POSTGRES_DB=ycsb
       - PGUSER=postgres
       - PGPASSWORD=postgres
       - POSTGRES_HOST_AUTH_METHOD=trust
@@ -61,7 +61,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=testdb
+      - POSTGRES_DB=ycsb
       - PGUSER=postgres
       - PGPASSWORD=postgres
       - POSTGRES_HOST_AUTH_METHOD=trust
