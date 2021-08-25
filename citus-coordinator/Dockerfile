@@ -1,7 +1,51 @@
-FROM lucasfs/citus-base-armhf
+# This Docker image is an adaptation based on the official files 
+# from Citus project GitHub repository: https://github.com/citusdata/docker
 
-# add boot check script
-COPY boot-check.sh /
-RUN chmod +x /boot-check.sh
+FROM postgres:13.2-alpine
+ARG VERSION=10.1.2
+LABEL maintainer="lucas-fs - lferreira@inf.ufsm.br" \
+      org.label-schema.name="Citus" \
+      org.label-schema.description="Scalable PostgreSQL for multi-tenant and real-time workloads" \
+      org.label-schema.url="https://www.citusdata.com" \
+      org.label-schema.vcs-url="https://github.com/citusdata/citus" \
+      org.label-schema.vendor="Citus Data, Inc." \
+      org.label-schema.version=${VERSION}-alpine \
+      org.label-schema.schema-version="1.0"
 
-CMD ["/bin/bash", "-c", "/boot-check.sh"]
+# Build citus and delete all used libraries. Warning: Libraries installed in this section will be deleted after build completion
+RUN apk add --no-cache \
+            --virtual builddeps \
+        build-base \
+        curl \
+        curl-dev \
+        openssl-dev \
+        ca-certificates \
+        clang \
+        llvm \
+        lz4-dev \
+        zstd-dev \
+        icu-dev && \
+    apk add --no-cache libcurl && \
+    curl -sfLO "https://github.com/citusdata/citus/archive/v${VERSION}.tar.gz" && \
+    tar xzf "v${VERSION}.tar.gz" && \
+    cd "citus-${VERSION}" && \
+   ./configure --with-security-flags && \
+    make install && \
+    cd .. && \
+    rm -rf "citus-${VERSION}" "v${VERSION}.tar.gz" && \
+    apk del builddeps
+
+#--------End of Citus Build
+
+# add citus to default PostgreSQL config
+RUN echo "shared_preload_libraries='citus'" >> /usr/local/share/postgresql/postgresql.conf.sample
+
+# add scripts to run after initdb
+COPY 001-create-citus-extension.sql /docker-entrypoint-initdb.d/
+
+# entry point unsets PGPASSWORD, but we need it to connect to workers
+# https://github.com/docker-library/postgres/blob/33bccfcaddd0679f55ee1028c012d26cd196537d/12/docker-entrypoint.sh#L303
+RUN sed "/unset PGPASSWORD/d" -i /usr/local/bin/docker-entrypoint.sh
+
+# Add lz4 dependencies
+RUN apk add zstd zstd-dev lz4 lz4-dev
