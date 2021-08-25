@@ -71,20 +71,18 @@ def get_healthy_tasks_ip(service):
 # Citus docker-compose has a dependency mapping as worker -> manager -> coordinator.
 # This means that whenever manager is created, coordinator is already there, but it may
 # not be ready to accept connections. We'll try until we can create a connection.
-def connect_to_coordinator():
-    citus_host = environ.get('CITUS_HOST', 'coordinator')
+def connect_to_coordinator(citus_host):
     postgres_pass = environ.get('POSTGRES_PASSWORD', '')
     postgres_user = environ.get('POSTGRES_USER', 'postgres')
     postgres_db = environ.get('POSTGRES_DB', postgres_user)
-
+    
     conn = None
     while conn is None:
         try:
-            conn = psycopg2.connect(
-                f"dbname={postgres_db} user={postgres_user} host={citus_host} password={postgres_pass}")
+            conn_credentials = f"dbname={postgres_db} user={postgres_user} host={citus_host} password={postgres_pass}"
+            conn = psycopg2.connect(conn_credentials)
         except psycopg2.OperationalError as error:
-            print(
-                f"Could not connect to {citus_host}, trying again in 1 second")
+            print(f"Could not connect to {citus_host}, trying again in 1 second")
             sleep(1)
         except (Exception, psycopg2.Error) as error:
             raise error
@@ -116,32 +114,42 @@ def update_cluster(conn, service):
         rebalance_shards(conn)
 
 
+# Get the service object from docker swarm stack
+def get_swarm_service(client, service_name, swarm_stack, label_role):
+    filters = {
+        'label': [
+            f"com.docker.stack.namespace={swarm_stack}",
+            f"com.citusdata.role={label_role}"
+        ],
+        'name': f"{swarm_stack}_{service_name}"
+    }
+
+    return client.services.list(filters=filters)[0]
+
+
 # Main logic loop for the manager
 def docker_checker():
     client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
 
-    # Creates the necessary connection to make the sql calls if the coordinator is ready
-    conn = connect_to_coordinator()
-
+    # Introspect the stack namespace used by the citus swarm cluster
     manager_hostname = environ['HOSTNAME']
     worker_service_name = environ.get('WORKER_SERVICE', 'worker')
+    coordinator_service_name = environ.get('COORDINATOR_SERVICE', 'coordinator')
 
-    # Introspect the stack namespace used by the citus swarm cluster
     manager_container = client.containers.get(manager_hostname)
     swarm_stack = manager_container.labels['com.docker.stack.namespace']
 
     print(f"Found swarm stack: {swarm_stack}", file=stderr)
 
-    # Filter only citus workers services in swarm stack
-    filters = {
-        'label': [
-            f"com.docker.stack.namespace={swarm_stack}",
-            "com.citusdata.role=Worker"
-        ],
-        'name': f"{swarm_stack}_{worker_service_name}"
-    }
+    # Get the coordinator connection host ip
+    coordinator_service = get_swarm_service(client, coordinator_service_name, swarm_stack, "Coordinator")
+    coordinator_ip = get_healthy_tasks_ip(coordinator_service)[0]
 
-    worker_service = client.services.list(filters=filters)[0]
+    # Creates the necessary connection to make the sql calls if the coordinator is ready
+    conn = connect_to_coordinator(coordinator_ip)
+
+    # Filter only citus workers services in swarm stack
+    worker_service = get_swarm_service(client, worker_service_name, swarm_stack, "Worker")
 
     # Consume docker events
     print('Listening for events...', file=stderr)
