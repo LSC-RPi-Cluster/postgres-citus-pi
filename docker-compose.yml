@@ -1,15 +1,21 @@
 version: '3.8'
 
 services:
+  ##############################
+  #   Citus coordinator node   #
+  ##############################
   coordinator:
-    image: lucasfs/citus-armhf
+    image: lucasfs/citus-coordinator-armhf
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=ycsb
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - POSTGRES_HOST_AUTH_METHOD=trust
+      &auth-conf
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: "ycsb"
+      PGUSER: "postgres"
+      PGPASSWORD: "postgres"
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    labels:
+      com.citusdata.role: "Coordinator"
     deploy:
       restart_policy:
         condition: on-failure
@@ -18,7 +24,7 @@ services:
       placement:
         max_replicas_per_node: 1
         constraints:
-          - node.labels.type == master
+          - node.labels.type == coordinator
     volumes:
       - /mnt/storage/pgdata:/var/lib/postgresql/data
     ports:
@@ -28,16 +34,16 @@ services:
     networks:
       - cluster_net
 
+  #########################
+  #   Citus worker node   #
+  #########################
   worker:
-    image: 'lucasfs/citus-armhf'
+    image: 'lucasfs/citus-worker-armhf'
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=ycsb
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - POSTGRES_HOST_AUTH_METHOD=trust
-    
+      << : *auth-conf
+      COORDINATOR_SERVICE: "coordinator"
+    labels:
+      com.citusdata.role: "Worker"
     deploy:
       restart_policy:
         condition: on-failure
@@ -46,7 +52,7 @@ services:
       placement:
         max_replicas_per_node: 1
         constraints:
-          - node.labels.type == slave
+          - node.labels.type == worker
     volumes: 
       - /mnt/storage/pgdata:/var/lib/postgresql/data
     ports:
@@ -56,15 +62,15 @@ services:
     networks:
       - cluster_net
 
+  #####################################
+  #   Citus membership manager node   #
+  #####################################
   manager:
     image: lucasfs/membership-manager-armhf
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=ycsb
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - POSTGRES_HOST_AUTH_METHOD=trust
+      << : *auth-conf
+      COORDINATOR_SERVICE: "coordinator"
+      WORKER_SERVICE: "worker"
     volumes: 
       - /var/run/docker.sock:/var/run/docker.sock
     deploy:
@@ -75,7 +81,9 @@ services:
       placement:
         max_replicas_per_node: 1
         constraints:
-          - node.labels.type == master
+          - node.labels.type == coordinator
+    volumes:
+      - "${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock"
     networks:
       - cluster_net
 
