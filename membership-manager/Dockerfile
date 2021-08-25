@@ -1,4 +1,4 @@
-FROM python:3-alpine
+FROM python:3.9.6-alpine3.14
 
 RUN apk add --no-cache \
             --virtual psycodeps \
