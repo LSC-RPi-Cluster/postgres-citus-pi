@@ -13,7 +13,7 @@ echo "POSTGRES_USER set as: $PG_USER"
 
 # make sure coordinator is ready to accept connections
 COORDINATOR_IP=$(getent hosts tasks.$COORDINATOR_SERVICE)
-until pg_isready -h $COORDINATOR_IP -p $COORDINATOR_PORT -U $PG_USER
+while ! nc -z $COORDINATOR_IP $COORDINATOR_PORT
 do
   echo "Waiting for Citus coordinator from service $COORDINATOR_SERVICE"
   sleep 2
