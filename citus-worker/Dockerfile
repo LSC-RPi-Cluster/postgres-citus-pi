@@ -1,4 +1,4 @@
-FROM lucasfs/citus-base-armhf
+FROM lucasfs/citus-coordinator-armhf
 
 # add boot check script
 COPY boot-check.sh /
