@@ -3,7 +3,7 @@
 
 FROM postgres:13.2-alpine
 ARG VERSION=10.1.2
-LABEL maintainer="lucas-fs - lferreira@inf.ufsm.br" \
+LABEL maintainer="github.com/lucas-fs" \
       org.label-schema.name="Citus" \
       org.label-schema.description="Scalable PostgreSQL for multi-tenant and real-time workloads" \
       org.label-schema.url="https://www.citusdata.com" \
