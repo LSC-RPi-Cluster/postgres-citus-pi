@@ -15,6 +15,30 @@ from sys import exit, stderr
 from time import sleep
 
 
+# Get database credentials from the container environment variables 
+def get_db_credentials():
+    postgres_pass = environ.get('POSTGRES_PASSWORD', '')
+    postgres_user = environ.get('POSTGRES_USER', 'postgres')
+    postgres_db = environ.get('POSTGRES_DB', postgres_user)
+
+    return {"dbname": postgres_db, "user": postgres_user, "password": postgres_pass}
+
+
+# Check if the postgres node is ready to connections
+def connection_is_ready(host, port):
+    conn_credentials = get_db_credentials()
+    conn_credentials['host'] = host
+    conn_credentials['port'] = port
+
+    try:
+        conn = psycopg2.connect(**conn_credentials)
+        conn.close()
+        return True
+
+    except:
+        return False
+
+
 # Get a list of active worker nodes in the cluster
 def get_active_workers(conn):
     cur = conn.cursor()
@@ -26,13 +50,17 @@ def get_active_workers(conn):
 
 
 # Adds a host to the cluster
-def add_worker(conn, host):
-    cur = conn.cursor()
-    worker_dict = ({'host': host, 'port': 5432})
-
+def add_worker(conn, host, port=5432):
     print(f"Adding {host} node", file=stderr)
-    cur.execute("""SELECT citus_add_node(%(host)s, %(port)s)""", worker_dict)
 
+    while not connection_is_ready(host, port):
+        print(f"The worker ({host}) still not accepting connections, trying again")
+        sleep(1)
+
+    cur = conn.cursor()    
+
+    cur.execute(f"""SELECT citus_add_node('{host}', {port});""")
+    print(f"Worker {host} added!", file=stderr)
 
 # Rebalance the shards over the worker nodes
 def rebalance_shards(conn):
@@ -43,14 +71,11 @@ def rebalance_shards(conn):
 
 
 # Removes all placements from a host and removes it from the cluster
-def remove_worker(conn, host):
+def remove_worker(conn, host, port=5432):
     cur = conn.cursor()
-    worker_dict = ({'host': host, 'port': 5432})
 
     print(f"Removing {host} node", file=stderr)
-    cur.execute("""DELETE FROM pg_dist_placement WHERE groupid = (SELECT groupid FROM 
-                   pg_dist_node WHERE nodename = %(host)s AND nodeport = %(port)s LIMIT 1);
-                   SELECT citus_remove_node(%(host)s, %(port)s)""", worker_dict)
+    cur.execute(f"""SELECT citus_remove_node('{host}', {port});""")
 
 
 # Return a list of tasks with desireState = running
@@ -71,25 +96,19 @@ def get_healthy_tasks_ip(service):
 # Citus docker-compose has a dependency mapping as worker -> manager -> coordinator.
 # This means that whenever manager is created, coordinator is already there, but it may
 # not be ready to accept connections. We'll try until we can create a connection.
-def connect_to_coordinator(citus_host):
-    postgres_pass = environ.get('POSTGRES_PASSWORD', '')
-    postgres_user = environ.get('POSTGRES_USER', 'postgres')
-    postgres_db = environ.get('POSTGRES_DB', postgres_user)
-    
-    conn = None
-    while conn is None:
-        try:
-            conn_credentials = f"dbname={postgres_db} user={postgres_user} host={citus_host} password={postgres_pass}"
-            conn = psycopg2.connect(conn_credentials)
-        except psycopg2.OperationalError as error:
-            print(f"Could not connect to {citus_host}, trying again in 1 second")
-            sleep(1)
-        except (Exception, psycopg2.Error) as error:
-            raise error
+def connect_to_coordinator(host, port=5432):
+    conn_credentials = get_db_credentials()
+    conn_credentials['host'] = host
+    conn_credentials['port'] = port
 
+    while not connection_is_ready(host, port):
+        print(f"Could not connect to {host}, trying again in 1 second")
+        sleep(1)
+    
+    conn = psycopg2.connect(**conn_credentials)
     conn.autocommit = True
 
-    print(f"connected to {citus_host}", file=stderr)
+    print(f"connected to {host}", file=stderr)
 
     return conn
 
@@ -150,6 +169,9 @@ def docker_checker():
 
     # Filter only citus workers services in swarm stack
     worker_service = get_swarm_service(client, worker_service_name, swarm_stack, "Worker")
+
+    # Update the initial cluster workers number
+    update_cluster(conn, worker_service)
 
     # Consume docker events
     print('Listening for events...', file=stderr)
