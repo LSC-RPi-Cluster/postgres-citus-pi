@@ -14,9 +14,9 @@ services:
       PGUSER: "postgres"
       PGPASSWORD: "postgres"
       POSTGRES_HOST_AUTH_METHOD: "trust"
-    labels:
-      com.citusdata.role: "Coordinator"
     deploy:
+      labels:
+        com.citusdata.role: "Coordinator"
       restart_policy:
         condition: on-failure
         max_attempts: 3
@@ -42,9 +42,9 @@ services:
     environment:
       << : *auth-conf
       COORDINATOR_SERVICE: "coordinator"
-    labels:
-      com.citusdata.role: "Worker"
     deploy:
+      labels:
+        com.citusdata.role: "Worker"
       restart_policy:
         condition: on-failure
         max_attempts: 3
@@ -71,8 +71,6 @@ services:
       << : *auth-conf
       COORDINATOR_SERVICE: "coordinator"
       WORKER_SERVICE: "worker"
-    volumes: 
-      - /var/run/docker.sock:/var/run/docker.sock
     deploy:
       restart_policy:
         condition: on-failure
